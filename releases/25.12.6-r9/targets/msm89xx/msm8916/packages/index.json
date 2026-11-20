@@ -2,12 +2,11 @@
   "version": 2,
   "architecture": "aarch64_generic",
   "packages": {
-    "base-files": "1722~981c978eff",
     "block-mount": "2026.05.23~16718b6e-r1",
     "dropbear": "2025.89-r3",
     "fstools": "2026.05.23~16718b6e-r1",
     "fwtool": "2025.10.03~04cd252e-r1",
-    "kernel": "6.12.112~bdcc5351c39ae3e26f28507f59afede0-r1",
+    "kernel": "6.12.112~65c7fb27d1b3518758cafa6729a86679-r1",
     "kmod-6lowpan": "6.12.112-r1",
     "kmod-9pnet": "6.12.112-r1",
     "kmod-ac97": "6.12.112-r1",
