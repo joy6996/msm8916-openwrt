@@ -1,0 +1,153 @@
+name: Upstream Release Auto Build
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Rebuild even if this tag was already built'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: upstream-auto-build
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Sync upstream release
+    runs-on: ubuntu-24.04
+    if: github.repository == 'joy6996/msm8916-openwrt'
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      tag: ${{ steps.decide.outputs.tag }}
+      sha: ${{ steps.merge.outputs.sha }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch upstream tags
+        run: |
+          git remote add upstream https://github.com/akbar-npj/msm8916-openwrt.git
+          git fetch --force --tags upstream '+refs/heads/main:refs/remotes/upstream/main'
+
+      - name: Pick latest upstream release tag
+        id: decide
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          TAG=$(git ls-remote --tags --refs upstream 'v*' \
+                | sed 's#.*refs/tags/##' | sort -V | tail -n1)
+          [ -n "$TAG" ] || { echo "::error::No v* tag found upstream"; exit 1; }
+          LAST=$(cat .github/upstream-built 2>/dev/null || true)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Latest upstream tag: $TAG (last built: ${LAST:-none})"
+          if [ "$TAG" = "$LAST" ] && [ "${FORCE}" != "true" ]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "Already built; nothing to do."
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge tag into main
+        id: merge
+        if: steps.decide.outputs.build == 'true'
+        env:
+          TAG: ${{ steps.decide.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if ! git merge --no-edit "$TAG"; then
+            echo "::error::Merge conflict on $TAG; resolve manually. main was NOT pushed."
+            exit 1
+          fi
+          grep -qx 'CONFIG_IP_ADVANCED_ROUTER=y' msm89xx/config-6.12 \
+            || { echo "::error::config-6.12 lost CONFIG_IP_ADVANCED_ROUTER=y"; exit 1; }
+          grep -qx 'CONFIG_IP_MULTIPLE_TABLES=y' msm89xx/config-6.12 \
+            || { echo "::error::config-6.12 lost CONFIG_IP_MULTIPLE_TABLES=y"; exit 1; }
+          git push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ufi003
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    uses: ./.github/workflows/build.yml
+    with:
+      device: ufi003
+      ref: ${{ needs.check.outputs.sha }}
+    secrets: inherit
+
+  publish:
+    name: Publish pre-release
+    needs: [check, build]
+    if: needs.check.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download firmware artifact
+        uses: actions/download-artifact@v7
+        with:
+          pattern: openwrt_firmware_ufi003_*
+          merge-multiple: true
+          path: dist
+
+      - name: Verify kmods, size and checksums
+        env:
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          set -euo pipefail
+          MANIFEST=$(ls dist/*.manifest)
+          for k in kmod-inet-diag kmod-nf-conntrack-netlink kmod-nf-socket kmod-nft-socket kmod-nft-tproxy; do
+            grep -q "^${k} " "$MANIFEST" || { echo "::error::$k missing from image manifest"; exit 1; }
+          done
+          SYS=$(ls dist/*-squashfs-sysupgrade.bin)
+          SIZE=$(stat -c%s "$SYS")
+          [ "$SIZE" -gt 30000000 ] || { echo "::error::sysupgrade image looks truncated ($SIZE bytes)"; exit 1; }
+          (cd dist && sha256sum * > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: Create pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          set -euo pipefail
+          {
+            echo "上游 akbar-npj/msm8916-openwrt ${TAG} 的自动构建，仅 ufi003，**未上机验证**。"
+            echo
+            echo "5 个 tproxy kmod 已内置镜像。刷前先备份：sysupgrade -b /tmp/backup.tar.gz；"
+            echo "刷入：sysupgrade -v <sysupgrade.bin>（保留配置）。SHA256 见 SHA256SUMS。"
+          } > /tmp/notes.md
+          gh release create "auto-ufi003-${TAG}" dist/* \
+            --title "ufi003 auto build ${TAG} (unverified)" \
+            --prerelease --latest=false \
+            --notes-file /tmp/notes.md
+
+      - name: Record built tag
+        env:
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          set -euo pipefail
+          echo "$TAG" > .github/upstream-built
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/upstream-built
+          git commit -m "ci: record upstream tag ${TAG}"
+          git push origin HEAD:main
