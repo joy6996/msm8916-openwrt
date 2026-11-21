@@ -149,5 +149,9 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add .github/upstream-built
-          git commit -m "ci: record upstream tag ${TAG}"
-          git push origin HEAD:main
+          if git diff --cached --quiet; then
+            echo "upstream-built already records ${TAG}; nothing to commit."
+          else
+            git commit -m "ci: record upstream tag ${TAG}"
+            git push origin HEAD:main
+          fi
