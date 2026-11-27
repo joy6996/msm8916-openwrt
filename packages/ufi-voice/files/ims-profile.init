@@ -1,0 +1,17 @@
+#!/bin/sh /etc/rc.common
+
+# ims-profile: create the "ims" WDS profile at every modem boot.
+#
+# See Docs/Modem Stability/220_VOLTE_ENABLEMENT_SOP.md (F29/F30, S23).
+# Keep this synchronous so boot waits for the profile check to finish.
+
+START=94
+STOP=10
+
+start() {
+	/usr/sbin/ims-profile-setup
+}
+
+stop() {
+	return 0
+}

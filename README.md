@@ -70,9 +70,10 @@ Recent additions on top of the base port:
 
 | Board Target  | Profile Name      | Device Model               | SoC     | RAM    | Storage   | LED mapping             |
 | :------------ | :---------------- | :------------------------- | :------ | :----- | :-------- | :---------------------- |
+| **`mifid`** | `generic-mifid` | HM-MIFIB-V18 | MSM8916 | 512 MB | 4 GB eMMC | None (no LEDs); 128x128 ST7735S SPI LCD |
 | **`hmuf02v5`**   | `generic-hmuf02v5`   | HMUF02-V5 (was HMU05) (250605 V0S) | MSM8916 | 512 MB | 4 GB eMMC | Green / Blue / Red      |
 | **`ufi001b`** | `generic-ufi001b` | Generic UFI001B 4G Stick   | MSM8916 | 512 MB | 4 GB eMMC | Green / Blue / Red      |
-| **`ufi003`**  | `generic-ufi003-mb-v02` | UFI003 MB V02 | MSM8916 | 512 MB | 4 GB eMMC | Green / Blue / Red      |
+| **`ufi003`**  | `generic-ufi003-mb-v02` | UFI003 MB V02 (also sold as QRZL903-01) | MSM8916 | 512 MB | 4 GB eMMC | Green / Blue / Red      |
 | **`uz801`**   | `yiming-uz801v3`  | YiMing UZ801 v3 Dongle     | MSM8916 | 512 MB | 4 GB eMMC | Green / Blue / Red      |
 | **`uf02`**    | `generic-uf02`    | Generic UF02 / UF2 Stick   | MSM8916 | 512 MB | 4 GB eMMC | Green / Blue / Red      |
 | **`mf800b`**  | `generic-mf800b`  | Generic MF800B 4G MiFi     | MSM8916 | 512 MB | 4 GB eMMC | Bi-colour WLAN/WAN      |
@@ -770,6 +771,24 @@ Bluetooth SPP, LuCI apps, …) are documented in
 Every custom on-device program answers `--help` (or `-h`) with its options, the
 `uci` keys it reads, and the `logread` tag to watch — for example
 `diag-bind --help`, `modem-bearer-watchdog --help`, `diag_nv --help`.
+
+---
+
+## 🙏 Acknowledgements
+
+**VoLTE and call audio** exist here because of
+**[@isprogrammer](https://github.com/isprogrammer)**, whose
+[`voice_calls_new`](https://github.com/isprogrammer/msm8916-openwrt/tree/voice_calls_new) branch
+we ported rather than reinvented: the `q6voice` kernel patch, the `ufi-voice` package
+(`imsdcm` verbatim, `ufi-voiced` as the base), the voice-aware `modem-bearer-watchdog` gate and
+its test suite, and the LuCI watchdog options. The `q6voice` driver inside that patch is
+**Stephan Gerhold**'s work from [msm8916-mainline](https://github.com/msm8916-mainline/linux).
+The exact file-by-file record is in
+[`Docs/Modem Stability/221_VOLTE_GUIDE.md`](Docs/Modem%20Stability/221_VOLTE_GUIDE.md#17-acknowledgements-and-provenance).
+
+Board bring-up, the failsafe console, the modem-stability investigation and the DIAG tooling are
+the work of this repo's maintainers and contributors; per-board credits are listed in
+[`MAINTAINERS.md`](MAINTAINERS.md).
 
 ---
 
