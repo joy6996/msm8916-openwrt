@@ -68,14 +68,32 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          if ! git merge --no-edit "$TAG"; then
-            echo "::error::Merge conflict on $TAG; resolve manually. main was NOT pushed."
+          git merge --no-commit --no-ff "$TAG" || true
+          # GITHUB_TOKEN is a GitHub App installation token: GitHub rejects any
+          # push that creates or updates .github/workflows/* (2026-11-24, r10).
+          # This fork's workflow files also carry the workflow_call inputs that
+          # build.yml needs, so upstream's copies must never replace them: drop
+          # upstream's workflow changes (their conflicts included) and keep ours.
+          rm -rf .github/workflows
+          git checkout HEAD -- .github/workflows
+          git add -A -- .github/workflows
+          if [ ! -f .git/MERGE_HEAD ]; then
+            echo "::error::Merge of $TAG did not start; main was NOT pushed."
             exit 1
           fi
+          if [ -n "$(git diff --name-only --diff-filter=U | grep -v '^\.github/workflows/' || true)" ]; then
+            echo "::error::Merge conflict on $TAG outside .github/workflows; main was NOT pushed."
+            git merge --abort || true
+            exit 1
+          fi
+          grep -q 'workflow_call' .github/workflows/build.yml \
+            || { echo "::error::fork build.yml lost workflow_call; main was NOT pushed."; git merge --abort || true; exit 1; }
           grep -qx 'CONFIG_IP_ADVANCED_ROUTER=y' msm89xx/config-6.12 \
-            || { echo "::error::config-6.12 lost CONFIG_IP_ADVANCED_ROUTER=y"; exit 1; }
+            || { echo "::error::config-6.12 lost CONFIG_IP_ADVANCED_ROUTER=y"; git merge --abort || true; exit 1; }
           grep -qx 'CONFIG_IP_MULTIPLE_TABLES=y' msm89xx/config-6.12 \
-            || { echo "::error::config-6.12 lost CONFIG_IP_MULTIPLE_TABLES=y"; exit 1; }
+            || { echo "::error::config-6.12 lost CONFIG_IP_MULTIPLE_TABLES=y"; git merge --abort || true; exit 1; }
+          git add -A
+          git commit -m "Merge upstream tag $TAG"
           git push origin HEAD:main
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
